@@ -26,6 +26,8 @@
 
 import sys
 import pygame
+import argparse
+import logging
 
 map = [ [ ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ' ],
         [ ' ', 'X', 'X', 'X', 'X', 'X', 'X', ' ', 'X', ' ' ],
@@ -73,6 +75,21 @@ woman_move = [ 0, 0 ]
 man_move = [ 0, 0 ]
 snake_move = [ 0, 0 ]
 
+# Parse arguments
+def parse_args():
+    parser = argparse.ArgumentParser(description="Alittle game about adam and Eve")
+    parser.add_argument('-s','--server',
+            help="Connect to server",
+            dest='server')
+
+    parser.add_argument('-d','--debug',
+            help="Priont output messages",
+            action='store_true',
+            dest='debug')
+
+    return parser.parse_args()
+
+
 # Initialize positions
 def init():
     def find(coords, c):
@@ -91,6 +108,16 @@ def init():
 
 init()
 
+args = parse_args()
+
+
+log_f='%(levelname)s:%(message)s'
+
+if not args.debug:
+    logging.basicConfig(format=log_f, level=logging.ERROR)
+else:
+    logging.basicConfig(format=log_f, level=logging.DEBUG)
+    logging.debug("Debug mode activated")
 
 while True:
     e = pygame.event.wait()
@@ -180,9 +207,9 @@ while True:
         woman_move = [ 0, 0 ]
         man_move = [ 0, 0 ]
 
-    #print("woman at %u,%u to %u,%u" % (woman_coords[0], woman_coords[1], woman_newcoords[0], woman_newcoords[1]))
-    #print("man at %u,%u to %u,%u" % (man_coords[0], man_coords[1], man_newcoords[0], man_newcoords[1]))
-    #print("snake at %u,%u to %u,%u" % (snake_coords[0], snake_coords[1], snake_newcoords[0], snake_newcoords[1]))
+    #logging.debug("woman at %u,%u to %u,%u" % (woman_coords[0], woman_coords[1], woman_newcoords[0], woman_newcoords[1]))
+    #logging.debug("man at %u,%u to %u,%u" % (man_coords[0], man_coords[1], man_newcoords[0], man_newcoords[1]))
+    #logging.debug("snake at %u,%u to %u,%u" % (snake_coords[0], snake_coords[1], snake_newcoords[0], snake_newcoords[1]))
 
     # Display everything
     screen.fill(grass)
