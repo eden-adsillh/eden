@@ -46,20 +46,21 @@ grass = (0x00, 0x90, 0x00)
 # Pygame initialization
 pygame.init()
 screen = pygame.display.set_mode( (unit * width, unit * height) )
+alpha = 128
 
 # Load resources
 woman = pygame.image.load("image/woman.png")
 woman_ghost = woman.copy()
-woman_ghost.set_alpha(0.5)
+woman_ghost.fill((255, 255, 255, alpha), None, pygame.BLEND_RGBA_MULT)
 woman_coords = [ 0, 0 ]
 man = pygame.image.load("image/man.png")
 man_ghost = man.copy()
-man_ghost.set_alpha(0.5)
+man_ghost.fill((255, 255, 255, alpha), None, pygame.BLEND_RGBA_MULT)
 man_coords = [ 0, 0 ]
 
 snake = pygame.image.load("image/snake.png")
 snake_ghost = snake.copy()
-snake_ghost.set_alpha(0.5)
+snake_ghost.fill((255, 255, 255, alpha), None, pygame.BLEND_RGBA_MULT)
 snake_coords = [ 0, 0 ]
 
 stone = pygame.image.load("image/stone.png")
