@@ -73,28 +73,6 @@ def parse_args():
     return parser.parse_args()
 args = parse_args()
 
-# Listening thread function
-def socket_thread():
-    print(so_list)
-    while True:
-        rea, wri, exc = select.select(so_list, [], [])
-        for item in rea:
-            message = item.recv(1024)
-            print(message)
-# ================================================================
-# TODO: change the prints by the correct code
-# ================================================================
-            if message == b'':
-                so_list.remove(item)
-            elif message == b'UP':
-                print('up')
-            elif message == b'DOWN':
-                print('down')
-            elif message == b'LEFT':
-                print('left')
-            elif message == b'RIGHT':
-                print('right')
-
 # Initialize socket
 so = socket.socket(socket.AF_INET, socket.SOCK_STREAM, 0)
 binding_port = 7777
@@ -115,10 +93,6 @@ else:
 if is_server:
     print('Waiting for opponent to connect...')
     opponent_so, opponent_addr = so.accept()
-
-# launching the listening thread
-so_list.append(opponent_so)
-threading.Thread(None, socket_thread).start()
 
 # Pygame initialization
 pygame.init()
@@ -166,6 +140,45 @@ def init():
     find(snake_coords, 'S')
     find(apple_coords, 'A')
 
+# Listening thread function
+def socket_thread():
+    print(so_list)
+    while True:
+        rea, wri, exc = select.select(so_list, [], [])
+        for item in rea:
+            message = item.recv(1024)
+            print(message)
+# ================================================================
+# TODO
+# ================================================================
+            if message == b'':
+                so_list.remove(item)
+            elif message == b'UP':
+                if is_server:
+                    man_move =      [ 0, -1 ]
+                else:
+                    woman_move =    [ 0, -1 ]
+            elif message == b'DOWN':
+                if is_server:
+                    man_move =      [ 0, 1 ]
+                else:
+                    woman_move =    [ 0, 1 ]
+            elif message == b'LEFT':
+                if is_server:
+                    man_move =      [ -1, 0 ]
+                else:
+                    woman_move =    [ -1, 0 ]
+            elif message == b'RIGHT':
+                if is_server:
+                    man_move =      [ 1, 0 ]
+                else:
+                    woman_move =    [ 1, 0 ]
+
+# Launching the listening thread
+so_list.append(opponent_so)
+threading.Thread(None, socket_thread).start()
+
+
 init()
 
 log_f='%(levelname)s:%(message)s'
@@ -184,34 +197,47 @@ while True:
         sys.exit()
 
     elif e.type == pygame.KEYDOWN:
+        if is_server:
+            # Check for woman movements
+            if woman_move == [ 0, 0 ]:
 
-    # Check for woman movements
-        elif e.key == pygame.K_z:
-            woman_move = [ 0, -1 ]
-            pass
-        elif e.key == pygame.K_s:
-            woman_move = [ 0, 1 ]
-            pass
-        elif e.key == pygame.K_q:
-            woman_move = [ -1, 0 ]
-            pass
-        elif e.key == pygame.K_d:
-            woman_move = [ 1, 0 ]
-            pass
+                if e.key == pygame.K_UP:
+                    woman_move = [ 0, -1 ]
+                    opponent_so.send(b'UP')
+                    pass
+                elif e.key == pygame.K_DOWN:
+                    woman_move = [ 0, 1 ]
+                    opponent_so.send(b'DOWN')
+                    pass
+                elif e.key == pygame.K_LEFT:
+                    woman_move = [ -1, 0 ]
+                    opponent_so.send(b'LEFT')
+                    pass
+                elif e.key == pygame.K_RIGHT:
+                    woman_move = [ 1, 0 ]
+                    opponent_so.send(b'RIGHT')
+                    pass
 
-    # Check for man movements
-        elif e.key == pygame.K_UP:
-            man_move = [ 0, -1 ]
-            pass
-        elif e.key == pygame.K_DOWN:
-            man_move = [ 0, 1 ]
-            pass
-        elif e.key == pygame.K_LEFT:
-            man_move = [ -1, 0 ]
-            pass
-        elif e.key == pygame.K_RIGHT:
-            man_move = [ 1, 0 ]
-            pass
+        else:
+            # Check for man movements
+            if man_move == [ 0, 0 ]:
+
+                if e.key == pygame.K_UP:
+                    man_move = [ 0, -1 ]
+                    opponent_so.send(b'UP')
+                    pass
+                elif e.key == pygame.K_DOWN:
+                    man_move = [ 0, 1 ]
+                    opponent_so.send(b'DOWN')
+                    pass
+                elif e.key == pygame.K_LEFT:
+                    man_move = [ -1, 0 ]
+                    opponent_so.send(b'LEFT')
+                    pass
+                elif e.key == pygame.K_RIGHT:
+                    man_move = [ 1, 0 ]
+                    opponent_so.send(b'RIGHT')
+                    pass
 
     #else:
     #    print(e)
