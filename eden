@@ -2,7 +2,7 @@
 
 # Copyright (c) 2017-2018 Samuel Thibault <samuel.thibault@ens-lyon.org>
 # All rights reserved.
-# 
+#
 # Redistribution and use in source and binary forms, with or without
 # modification, are permitted provided that the following conditions
 # are met:
@@ -11,7 +11,7 @@
 # 2. Redistributions in binary form must reproduce the above copyright
 #    notice, this list of conditions and the following disclaimer in the
 #    documentation and/or other materials provided with the distribution.
-# 
+#
 # THIS SOFTWARE IS PROVIDED BY Samuel Thibault ``AS IS'' AND
 # ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
 # IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
@@ -28,6 +28,11 @@ import sys
 import pygame
 import argparse
 import logging
+import socket
+import select
+import threading
+
+is_server = False
 
 map = [ [ ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ' ],
         [ ' ', 'X', 'X', 'X', 'X', 'X', 'X', ' ', 'X', ' ' ],
@@ -44,6 +49,76 @@ height = len(map)
 # This is the sprites size
 unit = 64
 grass = (0x00, 0x90, 0x00)
+
+# Parse arguments
+def parse_args():
+    parser = argparse.ArgumentParser(description="A little game about adam and Eve")
+    parser.add_argument('-s','--server',
+            help="Connect to server",
+            dest='server')
+
+    parser.add_argument('-p', '--port',
+            type=int,
+            help='Port of the server. If not specified, `7777` is used')
+
+    parser.add_argument('-b', '--binding-port',
+            type=int,
+            help='Port number to bind the local socket. If not specified, `7777` is used.')
+
+    parser.add_argument('-d','--debug',
+            help="Priont output messages",
+            action='store_true',
+            dest='debug')
+
+    return parser.parse_args()
+args = parse_args()
+
+# Listening thread function
+def socket_thread():
+    print(so_list)
+    while True:
+        rea, wri, exc = select.select(so_list, [], [])
+        for item in rea:
+            message = item.recv(1024)
+            print(message)
+# ================================================================
+# TODO: change the prints by the correct code
+# ================================================================
+            if message == b'':
+                so_list.remove(item)
+            elif message == b'UP':
+                print('up')
+            elif message == b'DOWN':
+                print('down')
+            elif message == b'LEFT':
+                print('left')
+            elif message == b'RIGHT':
+                print('right')
+
+# Initialize socket
+so = socket.socket(socket.AF_INET, socket.SOCK_STREAM, 0)
+binding_port = 7777
+if args.binding_port:
+    binding_port = args.binding_port
+so.bind(('', binding_port))
+so_list = []
+if args.server:
+    port = 7777
+    if args.port:
+        port = args.port
+    opponent_so = socket.create_connection((args.server, port))
+else:
+    is_server = True
+    so.listen(1)
+
+# Waiting for opponent to connect if this is the server. Bypass if not
+if is_server:
+    print('Waiting for opponent to connect...')
+    opponent_so, opponent_addr = so.accept()
+
+# launching the listening thread
+so_list.append(opponent_so)
+threading.Thread(None, socket_thread).start()
 
 # Pygame initialization
 pygame.init()
@@ -75,21 +150,6 @@ woman_move = [ 0, 0 ]
 man_move = [ 0, 0 ]
 snake_move = [ 0, 0 ]
 
-# Parse arguments
-def parse_args():
-    parser = argparse.ArgumentParser(description="Alittle game about adam and Eve")
-    parser.add_argument('-s','--server',
-            help="Connect to server",
-            dest='server')
-
-    parser.add_argument('-d','--debug',
-            help="Priont output messages",
-            action='store_true',
-            dest='debug')
-
-    return parser.parse_args()
-
-
 # Initialize positions
 def init():
     def find(coords, c):
@@ -108,9 +168,6 @@ def init():
 
 init()
 
-args = parse_args()
-
-
 log_f='%(levelname)s:%(message)s'
 
 if not args.debug:
@@ -128,8 +185,8 @@ while True:
 
     elif e.type == pygame.KEYDOWN:
 
-    # Check for wowoman movements
-        if e.key == pygame.K_z:
+    # Check for woman movements
+        elif e.key == pygame.K_z:
             woman_move = [ 0, -1 ]
             pass
         elif e.key == pygame.K_s:
