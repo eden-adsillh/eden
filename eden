@@ -61,10 +61,6 @@ def parse_args():
             type=int,
             help='Port of the server. If not specified, `7777` is used')
 
-    parser.add_argument('-b', '--binding-port',
-            type=int,
-            help='Port number to bind the local socket. If not specified, `7777` is used.')
-
     parser.add_argument('-d','--debug',
             help="Priont output messages",
             action='store_true',
@@ -75,18 +71,15 @@ args = parse_args()
 
 # Initialize socket
 so = socket.socket(socket.AF_INET, socket.SOCK_STREAM, 0)
-binding_port = 7777
-if args.binding_port:
-    binding_port = args.binding_port
-so.bind(('', binding_port))
 so_list = []
+port = 7777
+if args.port:
+    port = args.port
 if args.server:
-    port = 7777
-    if args.port:
-        port = args.port
     opponent_so = socket.create_connection((args.server, port))
 else:
     is_server = True
+    so.bind(('', port))
     so.listen(1)
 
 # Waiting for opponent to connect if this is the server. Bypass if not
@@ -142,6 +135,9 @@ def init():
 
 # Listening thread function
 def socket_thread():
+    global woman_move
+    global man_move
+    global snake_move
     print(so_list)
     while True:
         rea, wri, exc = select.select(so_list, [], [])
@@ -171,6 +167,7 @@ def socket_thread():
             elif message == b'RIGHT':
                 if is_server:
                     man_move =      [ 1, 0 ]
+                    print(man_move)
                 else:
                     woman_move =    [ 1, 0 ]
 
