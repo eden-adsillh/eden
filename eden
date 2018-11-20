@@ -34,6 +34,9 @@ import threading
 
 is_server   = False
 is_snake    = False
+woman_so    = None
+man_so      = None
+snake_so    = None
 
 map = [ [ ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ' ],
         [ ' ', 'X', 'X', 'X', 'X', 'X', 'X', ' ', 'X', ' ' ],
@@ -74,22 +77,25 @@ args = parse_args()
 # Initialize socket
 so = socket.socket(socket.AF_INET, socket.SOCK_STREAM, 0)
 so_list = []
-port = 7777
-if args.port:
-    port = args.port
+port = 7776
 if args.server:
-    opponent_so = socket.create_connection((args.server, port))
+    woman_so = socket.create_connection((args.server, port))
+    so_list.append(woman_so)
 else:
     is_server = True
 
-so.bind(('', port))
+binding_port = port
+if args.port:
+    binding_port = args.port
+so.bind(('', binding_port))
 so.listen(1)
 so_list.append(so)
 
 # Waiting for opponent to connect if this is the server. Bypass if not
 if is_server:
     print('Waiting for opponent to connect...')
-    opponent_so, opponent_addr = so.accept()
+    man_so, man_addr = so.accept()
+    so_list.append(man_so)
 
 # Pygame initialization
 pygame.init()
@@ -137,6 +143,11 @@ def init():
     find(snake_coords, 'S')
     find(apple_coords, 'A')
 
+def send_all(message):
+    for socket in so_list:
+        if socket != so:
+            socket.send(message)
+
 # Listening thread function
 def socket_thread():
     global woman_move
@@ -144,7 +155,8 @@ def socket_thread():
     global snake_move
     global is_snake
     global snake_so
-    global server_so
+    global woman_so
+    global man_so
     while True:
         rea, wri, exc = select.select(so_list, [], [])
         for item in rea:
@@ -161,43 +173,64 @@ def socket_thread():
                         so_list.append(snake_so)
                         # We send the socket informations of the snake to the opponent
                         # so he can connect to it and there is no centralised server
-                        opponent_so.send(b'SNAKE_ADDR ' + snake_addr[0].encode("UTF-8") + b' ' + str(snake_addr[1]).encode("UTF-8"))
+                        man_so.send(b'SNAKE ' + snake_addr[0].encode("UTF-8") + b':7779')
 
                     else:
                         is_snake = True
-                        server_so = opponent_so
-                        opponent_so = item.accept()
+                        man_so, man_addr = item.accept()
+                        so_list.append(man_so)
 
             # Else, it is not a connction request but a message
-            else:
+            elif item is woman_so:
                 message = item.recv(1024)
                 logging.info('Distant message recieved')
                 if message == b'':
-                    print("A player left the game\n")
+                    print("Woman\'s player left the game")
                     so_list.remove(item)
                 elif message == b'UP':
-                    if is_server:
-                        man_move =      [ 0, -1 ]
-                    else:
-                        woman_move =    [ 0, -1 ]
+                    woman_move =    [ 0, -1 ]
                 elif message == b'DOWN':
-                    if is_server:
-                        man_move =      [ 0, 1 ]
-                    else:
-                        woman_move =    [ 0, 1 ]
+                    woman_move =    [ 0, 1 ]
                 elif message == b'LEFT':
-                    if is_server:
-                        man_move =      [ -1, 0 ]
-                    else:
-                        woman_move =    [ -1, 0 ]
+                    woman_move =    [ -1, 0 ]
                 elif message == b'RIGHT':
-                    if is_server:
-                        man_move =      [ 1, 0 ]
-                    else:
-                        woman_move =    [ 1, 0 ]
+                    woman_move =    [ 1, 0 ]
+                # Snake info received from server
+                elif message[:5] == b'SNAKE':
+                    snake_addr = message[6:].decode("UTF-8").split(":")
+                    snake_so = socket.create_connection((snake_addr[0], int(snake_addr[1])))
+                    so_list.append(snake_so)
+            elif item is snake_so:
+                message = item.recv(1024)
+                logging.info('Distant message recieved')
+                if message == b'':
+                    print("Snake\'s player left the game")
+                    so_list.remove(item)
+                elif message == b'UP':
+                    snake_move =    [ 0, -1 ]
+                elif message == b'DOWN':
+                    snake_move =    [ 0, 1 ]
+                elif message == b'LEFT':
+                    snake_move =    [ -1, 0 ]
+                elif message == b'RIGHT':
+                    snake_move =    [ 1, 0 ]
+            elif item is man_so:
+                message = item.recv(1024)
+                logging.info('Distant message recieved')
+                if message == b'':
+                    print("Man\'s player left the game")
+                    so_list.remove(item)
+                elif message == b'UP':
+                        man_move =    [ 0, -1 ]
+                elif message == b'DOWN':
+                        man_move =    [ 0, 1 ]
+                elif message == b'LEFT':
+                        man_move =    [ -1, 0 ]
+                elif message == b'RIGHT':
+                        man_move =    [ 1, 0 ]
+
 
 # Launching the listening thread
-so_list.append(opponent_so)
 threading.Thread(None, socket_thread).start()
 
 
@@ -225,19 +258,40 @@ while True:
 
                 if e.key == pygame.K_UP:
                     woman_move = [ 0, -1 ]
-                    opponent_so.send(b'UP')
+                    send_all(b'UP')
                     pass
                 elif e.key == pygame.K_DOWN:
                     woman_move = [ 0, 1 ]
-                    opponent_so.send(b'DOWN')
+                    send_all(b'DOWN')
                     pass
                 elif e.key == pygame.K_LEFT:
                     woman_move = [ -1, 0 ]
-                    opponent_so.send(b'LEFT')
+                    send_all(b'LEFT')
                     pass
                 elif e.key == pygame.K_RIGHT:
                     woman_move = [ 1, 0 ]
-                    opponent_so.send(b'RIGHT')
+                    send_all(b'RIGHT')
+                    pass
+
+        elif is_snake:
+            # Check for snake movements
+            if snake_move == [ 0, 0 ]:
+
+                if e.key == pygame.K_UP:
+                    snake_move = [ 0, -1 ]
+                    send_all(b'UP')
+                    pass
+                elif e.key == pygame.K_DOWN:
+                    snake_move = [ 0, 1 ]
+                    send_all(b'DOWN')
+                    pass
+                elif e.key == pygame.K_LEFT:
+                    snake_move = [ -1, 0 ]
+                    send_all(b'LEFT')
+                    pass
+                elif e.key == pygame.K_RIGHT:
+                    snake_move = [ 1, 0 ]
+                    send_all(b'RIGHT')
                     pass
 
         else:
@@ -246,19 +300,19 @@ while True:
 
                 if e.key == pygame.K_UP:
                     man_move = [ 0, -1 ]
-                    opponent_so.send(b'UP')
+                    send_all(b'UP')
                     pass
                 elif e.key == pygame.K_DOWN:
                     man_move = [ 0, 1 ]
-                    opponent_so.send(b'DOWN')
+                    send_all(b'DOWN')
                     pass
                 elif e.key == pygame.K_LEFT:
                     man_move = [ -1, 0 ]
-                    opponent_so.send(b'LEFT')
+                    send_all(b'LEFT')
                     pass
                 elif e.key == pygame.K_RIGHT:
                     man_move = [ 1, 0 ]
-                    opponent_so.send(b'RIGHT')
+                    send_all(b'RIGHT')
                     pass
 
     #else:
@@ -305,12 +359,13 @@ while True:
         man_move = [ 0, 0 ]
 
     # Make everybody move when everybody chose her/his direction
-    if woman_move != [ 0, 0 ] and man_move != [ 0, 0 ]:
+    if woman_move != [ 0, 0 ] and man_move != [ 0, 0 ] and snake_move != [ 0, 0 ]:
         woman_coords = woman_newcoords
         man_coords = man_newcoords
         snake_coords = snake_newcoords
         woman_move = [ 0, 0 ]
         man_move = [ 0, 0 ]
+        snake_move = [ 0, 0 ]
 
     #logging.debug("woman at %u,%u to %u,%u" % (woman_coords[0], woman_coords[1], woman_newcoords[0], woman_newcoords[1]))
     #logging.debug("man at %u,%u to %u,%u" % (man_coords[0], man_coords[1], man_newcoords[0], man_newcoords[1]))
