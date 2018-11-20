@@ -31,6 +31,8 @@ import logging
 import socket
 import select
 import threading
+import os
+import crypt
 
 is_server = False
 
@@ -50,6 +52,14 @@ height = len(map)
 unit = 64
 grass = (0x00, 0x90, 0x00)
 
+u_attr = []
+# user0 is current one
+u_attr.append({
+    'key': '',
+    'move': ''
+})
+
+
 # Parse arguments
 def parse_args():
     parser = argparse.ArgumentParser(description="A little game about adam and Eve")
@@ -67,12 +77,15 @@ def parse_args():
             dest='debug')
 
     return parser.parse_args()
+
+
 args = parse_args()
 
 # Initialize socket
 so = socket.socket(socket.AF_INET, socket.SOCK_STREAM, 0)
 so_list = []
 port = 7777
+
 if args.port:
     port = args.port
 if args.server:
@@ -86,6 +99,13 @@ else:
 if is_server:
     print('Waiting for opponent to connect...')
     opponent_so, opponent_addr = so.accept()
+
+# Creating u_attr for opponent
+u_attr.append({'ready': False,
+               'hashed_move': '',
+               'key': '',
+               'move': ''
+               })
 
 # Pygame initialization
 pygame.init()
@@ -133,8 +153,22 @@ def init():
     find(snake_coords, 'S')
     find(apple_coords, 'A')
 
+
 # Listening thread function
 def socket_thread():
+    # Process command receive
+    def process_command(msg, attr):
+        import re
+        command, args = re.search(r"^/([\S]*)[\s](.*)", msg).group(1, 2)
+        if command == "move":
+            logging.debug("Move command receive hashed move : %s" % (args))
+            if not attr['hashed_move']:
+                attr['hashed_move'] = args
+            else:
+                logging.debug("move already set for this player")
+        elif command == "key":
+            logging.debug("Key verification message receive")
+
     global woman_move
     global man_move
     global snake_move
@@ -143,29 +177,12 @@ def socket_thread():
         rea, wri, exc = select.select(so_list, [], [])
         for item in rea:
             message = item.recv(1024)
-            logging.info('opponent message recieved')
+            logging.info('opponent message recieved %s' % (message))
             if message == b'':
                 so_list.remove(item)
-            elif message == b'UP':
-                if is_server:
-                    man_move =      [ 0, -1 ]
-                else:
-                    woman_move =    [ 0, -1 ]
-            elif message == b'DOWN':
-                if is_server:
-                    man_move =      [ 0, 1 ]
-                else:
-                    woman_move =    [ 0, 1 ]
-            elif message == b'LEFT':
-                if is_server:
-                    man_move =      [ -1, 0 ]
-                else:
-                    woman_move =    [ -1, 0 ]
-            elif message == b'RIGHT':
-                if is_server:
-                    man_move =      [ 1, 0 ]
-                else:
-                    woman_move =    [ 1, 0 ]
+            else:
+                process_command(message.decode('utf-8'), u_attr[1])
+
 
 # Launching the listening thread
 so_list.append(opponent_so)
@@ -174,7 +191,7 @@ threading.Thread(None, socket_thread).start()
 
 init()
 
-log_f='%(levelname)s:%(message)s'
+log_f = '%(levelname)s:%(message)s'
 
 if not args.debug:
     logging.basicConfig(format=log_f, level=logging.ERROR)
@@ -188,27 +205,28 @@ while True:
     # Check for exit
     if e.type == pygame.QUIT:
         sys.exit()
+    if u_attr[0]['key'] == "":
+       u_attr[0]['key'] = "%02x" % ord(os.urandom(1))
 
     elif e.type == pygame.KEYDOWN:
         if is_server:
             # Check for woman movements
             if woman_move == [ 0, 0 ]:
-
                 if e.key == pygame.K_UP:
                     woman_move = [ 0, -1 ]
-                    opponent_so.send(b'UP')
+                    u_attr[0]['move'] = "UP"
                     pass
                 elif e.key == pygame.K_DOWN:
                     woman_move = [ 0, 1 ]
-                    opponent_so.send(b'DOWN')
+                    u_attr[0]['move'] = "DOWN"
                     pass
                 elif e.key == pygame.K_LEFT:
                     woman_move = [ -1, 0 ]
-                    opponent_so.send(b'LEFT')
+                    u_attr[0]['move'] = "LEFT"
                     pass
                 elif e.key == pygame.K_RIGHT:
                     woman_move = [ 1, 0 ]
-                    opponent_so.send(b'RIGHT')
+                    u_attr[0]['move'] = "RIGHT"
                     pass
 
         else:
@@ -217,23 +235,28 @@ while True:
 
                 if e.key == pygame.K_UP:
                     man_move = [ 0, -1 ]
-                    opponent_so.send(b'UP')
+                    u_attr[0]['move'] = "UP"
                     pass
                 elif e.key == pygame.K_DOWN:
                     man_move = [ 0, 1 ]
-                    opponent_so.send(b'DOWN')
+                    u_attr[0]['move'] = "DOWN"
                     pass
                 elif e.key == pygame.K_LEFT:
                     man_move = [ -1, 0 ]
-                    opponent_so.send(b'LEFT')
+                    u_attr[0]['move'] =  "LEFT"
                     pass
                 elif e.key == pygame.K_RIGHT:
                     man_move = [ 1, 0 ]
-                    opponent_so.send(b'RIGHT')
+                    u_attr[0]['move'] = "RIGHT"
                     pass
+
+        e_move = crypt.crypt(u_attr[0]['move'],u_attr[0]['key'])
+        message = "/move " + e_move
+        opponent_so.send(message.encode('utf-8'))
 
     #else:
     #    print(e)
+
 
     def move(coords, move):
         return [ coords[0] + move[0], coords[1] + move[1] ]
