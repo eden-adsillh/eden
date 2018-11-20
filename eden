@@ -32,7 +32,8 @@ import socket
 import select
 import threading
 
-is_server = False
+is_server   = False
+is_snake    = False
 
 map = [ [ ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ' ],
         [ ' ', 'X', 'X', 'X', 'X', 'X', 'X', ' ', 'X', ' ' ],
@@ -57,9 +58,10 @@ def parse_args():
             help="Connect to server",
             dest='server')
 
+    # Little hack for localhost tests
     parser.add_argument('-p', '--port',
             type=int,
-            help='Port of the server. If not specified, `7777` is used')
+            help='Port to bind the local socket')
 
     parser.add_argument('-d','--debug',
             help="Priont output messages",
@@ -79,8 +81,10 @@ if args.server:
     opponent_so = socket.create_connection((args.server, port))
 else:
     is_server = True
-    so.bind(('', port))
-    so.listen(1)
+
+so.bind(('', port))
+so.listen(1)
+so_list.append(so)
 
 # Waiting for opponent to connect if this is the server. Bypass if not
 if is_server:
@@ -138,34 +142,59 @@ def socket_thread():
     global woman_move
     global man_move
     global snake_move
-    print(so_list)
+    global is_snake
+    global snake_so
+    global server_so
     while True:
         rea, wri, exc = select.select(so_list, [], [])
         for item in rea:
-            message = item.recv(1024)
-            logging.info('opponent message recieved')
-            if message == b'':
-                so_list.remove(item)
-            elif message == b'UP':
-                if is_server:
-                    man_move =      [ 0, -1 ]
-                else:
-                    woman_move =    [ 0, -1 ]
-            elif message == b'DOWN':
-                if is_server:
-                    man_move =      [ 0, 1 ]
-                else:
-                    woman_move =    [ 0, 1 ]
-            elif message == b'LEFT':
-                if is_server:
-                    man_move =      [ -1, 0 ]
-                else:
-                    woman_move =    [ -1, 0 ]
-            elif message == b'RIGHT':
-                if is_server:
-                    man_move =      [ 1, 0 ]
-                else:
-                    woman_move =    [ 1, 0 ]
+
+            # Someone tries to connect ?
+            # A new connection request in this function must be the snake as the
+            # opponent has alredy connected from outside this function
+            if item is so:
+                # Bypass if there is already 3 players
+                if len(so_list) < 3:
+                    if is_server:
+                        print('The snake has joined the game')
+                        snake_so, snake_addr = item.accept()
+                        so_list.append(snake_so)
+                        # We send the socket informations of the snake to the opponent
+                        # so he can connect to it and there is no centralised server
+                        opponent_so.send(b'SNAKE_ADDR ' + snake_addr[0].encode("UTF-8") + b' ' + str(snake_addr[1]).encode("UTF-8"))
+
+                    else:
+                        is_snake = True
+                        server_so = opponent_so
+                        opponent_so = item.accept()
+
+            # Else, it is not a connction request but a message
+            else:
+                message = item.recv(1024)
+                logging.info('Distant message recieved')
+                if message == b'':
+                    print("A player left the game\n")
+                    so_list.remove(item)
+                elif message == b'UP':
+                    if is_server:
+                        man_move =      [ 0, -1 ]
+                    else:
+                        woman_move =    [ 0, -1 ]
+                elif message == b'DOWN':
+                    if is_server:
+                        man_move =      [ 0, 1 ]
+                    else:
+                        woman_move =    [ 0, 1 ]
+                elif message == b'LEFT':
+                    if is_server:
+                        man_move =      [ -1, 0 ]
+                    else:
+                        woman_move =    [ -1, 0 ]
+                elif message == b'RIGHT':
+                    if is_server:
+                        man_move =      [ 1, 0 ]
+                    else:
+                        woman_move =    [ 1, 0 ]
 
 # Launching the listening thread
 so_list.append(opponent_so)
