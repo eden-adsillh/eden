@@ -77,7 +77,7 @@ args = parse_args()
 # Initialize socket
 so = socket.socket(socket.AF_INET, socket.SOCK_STREAM, 0)
 so_list = []
-port = 7776
+port = 7777
 if args.server:
     woman_so = socket.create_connection((args.server, port))
     so_list.append(woman_so)
@@ -359,7 +359,8 @@ while True:
         man_move = [ 0, 0 ]
 
     # Make everybody move when everybody chose her/his direction
-    if woman_move != [ 0, 0 ] and man_move != [ 0, 0 ] and snake_move != [ 0, 0 ]:
+    # We assume that if there is 3 sockets in so_list, the snake is playing
+    if woman_move != [ 0, 0 ] and man_move != [ 0, 0 ] and (len(so_list) < 3 or snake_move != [ 0, 0 ]):
         woman_coords = woman_newcoords
         man_coords = man_newcoords
         snake_coords = snake_newcoords
