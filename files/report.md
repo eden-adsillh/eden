@@ -34,7 +34,7 @@ Bien que, jusqu'alors, la présence d'un `select` dans le thread ne s'avérait p
 necessaire car, étant 2 joueurs, chacun n'avait qu'un socket à surveiller (celui
 de l'opposant), elle devient maintenant indispensable. Pour éviter d'avoir un
 serveur central, on a d'abord décidé que les clients devaient, par défaut,
-supposer qu'ils devaient accepter une éventuelle nouvelle connection, bien que
+supposer qu'ils devaient accepter une éventuelle nouvelle connexion, bien que
 seul un dernier client puisse se connecter et qu'il n'est pas nécessaire pour
 les deux d'attendre une connexion (car seul l'un d'entre eux va se connecter à
 l'autre et qu'il n'y aura pas plus de trois joueurs).
