@@ -23,7 +23,7 @@ infinie du jeu semblait intéressante. Cependant, l'appel de
 `pygame.event.wait` étant bloquant dans cette boucle, il a été décidé de créer
 un thread parallèle contenant ce select et écoutant les sockets pour éviter
 d'éventuels problèmes à venir, en prenant pour exemple la façon dont
-fonctionnent d'autres outil du monde du jeu vidéo : une boucle, chargée de
+fonctionnent d'autres outils du monde du jeu vidéo : une boucle, chargée de
 l'affichage, effectue le moins d'actualisations possible, avec comme limite
 maximum, de préférence, le taux de rafraichissement du moniteur qui affiche le
 jeu, et une boucle, chargée d'effectuer d'autres calculs, actualisée le plus
