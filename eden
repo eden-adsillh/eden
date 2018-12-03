@@ -480,6 +480,9 @@ def init():
 
 init()
 
+current_user['key'] = crypt.mksalt(crypt.METHOD_SHA256)
+logging.debug("Create user key : %s" % (current_user['key']))
+
 while True:
     e = pygame.event.wait()
 
@@ -490,9 +493,8 @@ while True:
 
     elif e.type == pygame.KEYDOWN:
         if e.key == pygame.K_RETURN:
-            if current_user['move']:
-                current_user['key'] = crypt.mksalt(crypt.METHOD_SHA256)
-                logging.debug("Create user key : %s" % (current_user['key']))
+            if current_user['move'] and not current_user['hashed_move']:
+                #current_user['key'] = crypt.mksalt(crypt.METHOD_SHA256)
                 current_user['hashed_move'] = crypt.crypt(
                     current_user['move'],
                     current_user['key']).split('$')[3]
