@@ -445,6 +445,7 @@ logging.debug("We pass the wait event")
 pygame.init()
 screen = pygame.display.set_mode( (unit * width, unit * height) )
 alpha = 128
+pygame.display.set_caption("eden - " + current_user['player'])
 
 # Load resources
 woman = pygame.image.load("image/woman.png")
