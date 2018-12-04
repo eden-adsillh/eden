@@ -121,7 +121,7 @@ class NetEvents(threading.Thread):
     # Process command receive
     def process_command(self, msg, index):
         import re
-        logging.debug("player %s sent command" % (msg))
+        logging.debug("player %s sent command" % (u_attr[index]['player']))
         command, args = re.search(r"^/([\S]*)[\s](.*)", msg).group(1, 2)
         if command == "move":
             logging.debug("-> move '%s'" % (args))
@@ -137,7 +137,6 @@ class NetEvents(threading.Thread):
             move, key = re.search(
                 r"(.*)[\s](.*)",
                 args).group(1, 2)
-            logging.debug("key : '%s' | move '%s'" % (key, move))
             rhmove = crypt.crypt(move, key).split('$')[3]
             if u_attr[index]['hashed_move'] != rhmove:
                 # Player cheat
