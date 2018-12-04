@@ -175,9 +175,6 @@ class NetEvents(threading.Thread):
         elif command == "player":
             logging.debug("-> played character: %s" % (args))
             u_attr[index]['player'] = args
-
-        elif command == "end_annonce":
-            logging.debug("-> end_annonce")
             c_event.set()
 
         # Get peer listen port
@@ -263,9 +260,6 @@ class NetEvents(threading.Thread):
                     # send current player
                     message = "/player " + current_user['player']
                     s.send(message.encode('utf-8'))
-                    time.sleep(.5)
-                    # send /end_annonce message to tell client continue
-                    s.send('/end_annonce now'.encode('utf-8'))
 
                     # unlock main thread
                     s_event.set()
