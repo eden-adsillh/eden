@@ -53,6 +53,11 @@ height = len(map)
 unit = 64
 grass = (0x00, 0x90, 0x00)
 
+woman_move = [ 0, 0 ]
+man_move = [ 0, 0 ]
+snake_move = [ 0, 0 ]
+round_played = False
+
 # Network message structure
 class n_message:
     player = 0
@@ -91,8 +96,8 @@ def parse_args():
     return parser.parse_args()
 
 def get_all_hmoves():
-    if not current_user['hashed_move']:
-        return False
+    #if not current_user['hashed_move']:
+    #    return False
     for _, a in u_attr.items():
         if not a['hashed_move']:
             return False
@@ -100,8 +105,8 @@ def get_all_hmoves():
 
 
 def get_all_moves():
-    if not current_user['move']:
-        return False
+    #if not current_user['move']:
+    #    return False
     for _, a in u_attr.items():
         if not a['move']:
             return False
@@ -136,9 +141,9 @@ class NetEvents(threading.Thread):
             rhmove = crypt.crypt(move, key).split('$')[3]
             if u_attr[index]['hashed_move'] != rhmove:
                 # Player cheat
-                print("->-> cheat detected")# wanted '%s' / get '%s'" % (
-                    #index, u_attr[index]['hashed_move'],
-                    #rhmove))
+                print("->-> cheat detected wanted '%s' / get '%s'" % (
+                    index, u_attr[index]['hashed_move'],
+                    rhmove))
                 # TODO: what do you do in this case
             else:
                 logging.debug("->-> move verification OK")
@@ -205,7 +210,8 @@ class NetEvents(threading.Thread):
     def run(self):
         global woman_move
         global man_move
-        global snake
+        global snake_move
+        global round_played
 
         # Initialize socket
         so = socket.socket(socket.AF_INET, socket.SOCK_STREAM, 0)
@@ -258,7 +264,7 @@ class NetEvents(threading.Thread):
                     # send current player
                     message = "/player " + current_user['player']
                     s.send(message.encode('utf-8'))
-
+                    time.sleep(.5)
                     # send /end_annonce message to tell client continue
                     s.send('/end_annonce now'.encode('utf-8'))
 
@@ -299,14 +305,13 @@ class NetEvents(threading.Thread):
                             if item.fileno() is m.player:
                                 item.send(m.msg.encode('utf-8'))
 
-            if get_all_hmoves():
-                create_message(0,
-                               "/key " + current_user['move'] + " " + current_user['key'])
-                current_user['hashed_move'] = ''
+            if get_all_hmoves() and round_played:
+                create_message(0, "/key " + current_user['move'] + " " + current_user['key'])
+                current_user['move'] = ''
+                round_played = False
 
             if get_all_moves():
                 for index, item in u_attr.items():
-                    print(item['player'])
                     if item['player'] == 'eve':
                         if item['move'] == "UP":
                             woman_move = [ 0, -1 ]
@@ -334,7 +339,12 @@ class NetEvents(threading.Thread):
                             snake_move = [ -1, 0 ]
                         elif item['move'] == "RIGHT":
                             snake_move = [ 1, 0 ]
-                    item['move'] = ''
+                    clear_move_attr(item)
+
+def clear_move_attr(attr_dict):
+    attr_dict['move'] = ''
+    attr_dict['hashed_move'] = ''
+    attr_dict['key'] = ''
 
 # Signal handler for CTRL + C
 def handler_exit(signum, frame):
@@ -458,10 +468,6 @@ stone_coords = [ 0, 0 ]
 apple = pygame.image.load("image/apple.png")
 apple_coords = [ 0, 0 ]
 
-woman_move = [ 0, 0 ]
-man_move = [ 0, 0 ]
-snake_move = [ 0, 0 ]
-
 # Initialize positions
 def init():
     def find(coords, c):
@@ -493,14 +499,16 @@ while True:
 
     elif e.type == pygame.KEYDOWN:
         if e.key == pygame.K_RETURN:
-            if current_user['move'] and not current_user['hashed_move']:
+            if current_user['move'] and not round_played:
                 #current_user['key'] = crypt.mksalt(crypt.METHOD_SHA256)
                 current_user['hashed_move'] = crypt.crypt(
                     current_user['move'],
                     current_user['key']).split('$')[3]
                 create_message(0,"/move " + str(current_user['hashed_move']))
+                current_user['hashed_move'] == ''
+                round_played = True
 
-        elif not current_user['hashed_move']:
+        elif not round_played:
 
             if current_user['player'] == 'eve':
                 if e.key == pygame.K_UP:
@@ -598,9 +606,11 @@ while True:
         woman_move = [ 0, 0 ]
         man_newcoords = man_coords
         man_move = [ 0, 0 ]
+        snake_newcoords = snake_coords
+        snake_move = [ 0, 0 ]
 
     # Make everybody move when everybody chose her/his direction
-    if woman_move != [ 0, 0 ] and man_move != [ 0, 0 ]: # and (len(so_list) < 3 or snake_move != [ 0, 0 ]):
+    if woman_move != [ 0, 0 ] and man_move != [ 0, 0 ]  and (len(u_attr.items()) < 2 or snake_move != [ 0, 0 ]):
         woman_coords = woman_newcoords
         man_coords = man_newcoords
         snake_coords = snake_newcoords
