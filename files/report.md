@@ -6,21 +6,25 @@ deux au moyen de nos connaissances.
 Ce rapport est rédigé par Yorick Barbanneau et Luc Lauriou.
 
 ## Sommaire
+
 - Fonctionnalités apportées
 - Déroulement
 - Choix techniques et difficultés rencontrées
   - Mode de communication "serverless"
   - Obfuscation des mouvements et triche
+  - Signal et Thread
 - Sources
 - Annexes
 
 ## Fonctionnalités apportées
+
 Notre solution embarque comme nouvelles fonctionnalités, par rapport au code
-fourni, le multijoueur en réseau à deux, ou à trois avec la possibilité
+fourni, le multijoueur en réseau à deux ou à trois avec la possibilité
 d'incarner le serpent et l'obfuscation des messages de mouvement pour éviter la
 triche.
 
 ## Déroulement
+
 Comme point de départ, la fonction `select` de Python placée dans la boucle
 infinie du jeu semblait intéressante. Cependant, l'appel de
 `pygame.event.wait` étant bloquant dans cette boucle, il a été décidé de créer
@@ -33,17 +37,16 @@ jeu, et une boucle, chargée d'effectuer d'autres calculs, actualisée le plus
 souvent possible.
 
 Une première version du code plaçait un des joueurs en position d'hôte et les
-autres joueurs en position de clients. L'hôte se chargeait de fournir les
-informations qui pouvaient manquer aux clients. On a ensuite développé une
-deuxième version sans hôte et qui a permis de régler certaines contraites dues
-à la mise en place d'un mode à plus de deux joueurs.
+autres joueurs en position de clients. L'hôte se chargeait de centraliser les
+informations et de les renvoyer aux différents hôtes. On a ensuite développé une
+deuxième version sans serveur central nous permettant régler certaines
+contraites dues à la mise en place d'un mode à plus de deux joueurs.
 
 Ensuite, on a effectué la mise en place des module, pour jouer avec le serpent
-et pour chiffrer les mouvements tant que tout le monde n'a pas joué pour limiter
-la triche. Bien que, jusqu'alors, la présence d'un `select` dans le thread ne
-s'avérait pas nécessaire car, étant seulement 2 joueurs, chacun n'avait qu'un
-socket à surveiller (celui de l'opposant), elle devient maintenant
-indispensable.
+et pour chiffrer les mouvements, limitant ainsi la triche. Bien que,
+jusqu'alors, la présence d'un `select` dans le thread ne s'avérait pas
+nécessaire car, étant seulement 2 joueurs, chacun n'avait qu'un socket à
+surveiller (celui de l'opposant), elle devient maintenant indispensable.
 
 ## Choix techniques et difficultés rencontrées
 
@@ -63,17 +66,22 @@ d'informations entre pairs précis :
  3. Le joueur 2 envoi le personnage qu'il joue par un message `/player <name>`
 
 Le joueur 1 ignorera toutes les requêtes `/peer` sauf celles venant du joueur 2
-afin d'éviter les problèmes de connexion infinie ( 1 -> 2 -> 3 -> 2 ->3 etc.)
+afin d'éviter les problèmes de connexion infinie ( 1 -> 2 -> 3 -> 2 ->3 etc.).
 
-Avec ce mode de communication, chacun des joueurs possède une version du modèle
-de données en local et effectue les modifications sur ces données localement,
-ce qui nous a inévitablement amené à rencontrer de nombreux bugs où les données
-pouvaient être différentes selon les clients. C'est pourquoi il a fallu
+Avec ce mode de communication, chacun des joueurs possèdent une version du
+modèle de données en local et effectue les modifications sur celui-ci. Ce
+fonctionnement nous a inévitablement amené à rencontrer de nombreux bugs car les
+données pouvaient être différentes selon les clients. C'est pourquoi il a fallu
 s'assurer que chaque joueur distant avait effectué un mouvement avant de pouvoir
 en rejouer un autre. Bien entendu, la mise en place du module d'obfuscation rend
 véritablement nécessaire cette vérification étant donné que la clé de
-déchiffrement ne doit être envoyée qu'une fois qu'on s'est assuré d'avoir reçu
-les mouvements de chaque joueur.
+déchiffrement ne doit être envoyée une fois les mouvemments de tous les joueur
+annoncés.
+
+Le code réseau pour connecter les pairs entre eux, annoncer les pairs, et
+vérifier les mouvenment a été testé indépendemment du jeux. Il nous a permis de
+tester tout celà avec 4 pais connecté en même temps, même si pour les besoins du
+jeu 3 suffisents.
 
 ### Obfuscation des mouvements et triche
 
@@ -109,12 +117,58 @@ Comme la vérification des messages nécessite l'envoi du sel aux adversaires, i
 pourraient essayer de déchiffrer les message suivants avec la clé obtenue. Il
 est donc nécessaire de changer la clé à chaque tour.
 
+### Signal et Thread
+
+Afin de prendre en compte le signal SIGINT avec notre thread réseau, nous avons
+du chercher du côté de la gestion de signal en Python. Plusieurs facteurs
+faisait que ça ne se passait pas comme prévu : 
+
+ - Le signal `SIGINT` était reçu par le thread principal qui ne le répercuttait
+     pas sur le thread réseau.
+ - Une fois une fonction de gestion des signaux mise en place pour gérer l'arrêt
+     du thread réseau, il nous restait un cas particulier. L'appel de
+     `select.select()` est bloquant tant qu'il n'y a pas de donnée reçue, donc
+     pas de gestion du signal. Il est cependant possible de rendre cet appel
+     non-bloquant avec `select.select([], [], [], 0)` entrainant cependant une
+     hausse de la consommation de temps CPU lors de l'attente de donnée.
+
 ## Sources
+
 La majorité du code a été rédigée à l'aide de la documentation Python et de nos
 connaissances personnelles. Le support de Stackoverflow a été utile pour trouver
 des concepts natifs à Python ou des façons de faire (ex : comment séparer une
 chaine de caractères), mais aucune fonction ou de partie de code n'a été
 copiée.
+
+L'aide d'**iPython** a aussi été précieuse notamment pour les opérations sur les
+variables (comparaison de dictionnaires ou de listes, découpages de chaines avec
+des *regex* etc.). Il nous a aussi permis de tester rapidement des bout de code et de
+comprendre le foctionnement de certaines fonctions comme `crypt.mksalt()` par
+exemple.
+
+## Conclusion
+
+Avec ce projet, nous avons pu découvrir Python un plus en profondeur et
+entrevoir les possibilités de ce langage. Sa librairie standard bien fournie,
+ses type de variable très pratiques (tuples, dictionnaires, listes) et les
+nombreux modules disponnibles en font un langage de choix qui mérite sa solide
+réputation.
+
+Le projet nous a permis de mettre un pied dans la programmation réseau d'en
+cerner les problèmes, d'immaginer des solutions. Nous avons délibérément choisit
+de m'intégrer que peu de fonctionnalité, mais pour se concentrer sur
+l'implémentation d'un système complètement acentré nécessitant plus de travail
+de fond.
+
+Nous pourrions cependant améliorer certains points :
+
+ - simplifier la gestion des messages entre joueurs en particulier pour
+     l'annonce des pairs. Il serait possible, par exemple, de gerer les
+     messages entrants avec une `Queue()` afin de permettre une gestion
+     d'annonce des pairs plus globale (depuis tous les pairs et non pas depuis
+     le premier uniquement)
+ - Travailler sur l'optimisation générale afin de réduire son empreinte sur le
+     temps CPU.
 
 ## Annexes
 
