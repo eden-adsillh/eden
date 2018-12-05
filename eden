@@ -112,6 +112,67 @@ def get_all_moves():
             return False
     return True
 
+
+def current_coords():
+    if current_user['player'] == 'eve':
+        return str(woman_coords[0]) + ":" + str(woman_coords[1])
+    elif current_user['player'] == 'adam':
+        return str(man_coords[0]) + ":" + str(man_coords[1])
+    elif current_user['player'] == 'snake':
+        return str(snake_coords[0]) + ":" + str(snake_coords[1])
+
+# Load resources
+alpha = 128
+woman = pygame.image.load("image/woman.png")
+woman_ghost = woman.copy()
+woman_ghost.fill((255, 255, 255, alpha), None, pygame.BLEND_RGBA_MULT)
+woman_coords = [ 0, 0 ]
+man = pygame.image.load("image/man.png")
+man_ghost = man.copy()
+man_ghost.fill((255, 255, 255, alpha), None, pygame.BLEND_RGBA_MULT)
+man_coords = [ 0, 0 ]
+
+snake = pygame.image.load("image/snake.png")
+snake_ghost = snake.copy()
+snake_ghost.fill((255, 255, 255, alpha), None, pygame.BLEND_RGBA_MULT)
+snake_coords = [ 0, 0 ]
+
+stone = pygame.image.load("image/stone.png")
+stone_coords = [ 0, 0 ]
+
+apple = pygame.image.load("image/apple.png")
+apple_coords = [ 0, 0 ]
+
+# Initialize positions
+def init():
+    def find(coords, c):
+        for y in range(len(map)):
+            for x in range(len(map[y])):
+                if map[y][x] == c:
+                    coords[0] = x
+                    coords[1] = y
+                    return
+        raise Exception('oops')
+
+    find(woman_coords, '1')
+    find(man_coords, '2')
+    find(snake_coords, 'S')
+    find(apple_coords, 'A')
+
+init()
+
+def set_coords(player, position):
+    global woman_coords
+    global man_coords
+    global snake_coords
+    
+    if player == 'eve':
+        woman_coords = position
+    elif player == 'adam':
+        man_coords = position
+    elif player == 'snake':
+        snake_coords = position
+
 class NetEvents(threading.Thread):
 
     def __init__(self):
@@ -176,7 +237,10 @@ class NetEvents(threading.Thread):
             logging.debug("-> played character: %s" % (args))
             player, str_position = args.split(" ")
             u_attr[index]['player'] = player
-            print(str_position.split(":"))
+            position = []
+            for item in str_position.split(":"):
+                position.append(int(item))
+            set_coords(player, position)
             c_event.set()
 
         # Get peer listen port
@@ -441,55 +505,7 @@ logging.debug("We pass the wait event")
 # Pygame initialization
 pygame.init()
 screen = pygame.display.set_mode( (unit * width, unit * height) )
-alpha = 128
 pygame.display.set_caption("eden - " + current_user['player'])
-
-# Load resources
-woman = pygame.image.load("image/woman.png")
-woman_ghost = woman.copy()
-woman_ghost.fill((255, 255, 255, alpha), None, pygame.BLEND_RGBA_MULT)
-woman_coords = [ 0, 0 ]
-man = pygame.image.load("image/man.png")
-man_ghost = man.copy()
-man_ghost.fill((255, 255, 255, alpha), None, pygame.BLEND_RGBA_MULT)
-man_coords = [ 0, 0 ]
-
-snake = pygame.image.load("image/snake.png")
-snake_ghost = snake.copy()
-snake_ghost.fill((255, 255, 255, alpha), None, pygame.BLEND_RGBA_MULT)
-snake_coords = [ 0, 0 ]
-
-stone = pygame.image.load("image/stone.png")
-stone_coords = [ 0, 0 ]
-
-apple = pygame.image.load("image/apple.png")
-apple_coords = [ 0, 0 ]
-
-# Initialize positions
-def init():
-    def find(coords, c):
-        for y in range(len(map)):
-            for x in range(len(map[y])):
-                if map[y][x] == c:
-                    coords[0] = x
-                    coords[1] = y
-                    return
-        raise Exception('oops')
-
-    find(woman_coords, '1')
-    find(man_coords, '2')
-    find(snake_coords, 'S')
-    find(apple_coords, 'A')
-
-init()
-
-def current_coords():
-    if current_user['player'] == 'eve':
-        return str(woman_coords[0]) + ":" + str(woman_coords[1])
-    elif current_user['player'] == 'adam':
-        return str(man_coords[0]) + ":" + str(man_coords[1])
-    elif current_user['player'] == 'snake':
-        return str(snake_coords[0]) + ":" + str(snake_coords[1])
 
 # current_user['key'] = crypt.mksalt(crypt.METHOD_SHA256)
 logging.debug("Create user key : %s" % (current_user['key']))
