@@ -174,7 +174,9 @@ class NetEvents(threading.Thread):
         # peer send which personnage he play
         elif command == "player":
             logging.debug("-> played character: %s" % (args))
-            u_attr[index]['player'] = args
+            player, str_position = args.split(" ")
+            u_attr[index]['player'] = player
+            print(str_position.split(":"))
             c_event.set()
 
         # Get peer listen port
@@ -259,6 +261,7 @@ class NetEvents(threading.Thread):
 
                     # send current player
                     message = "/player " + current_user['player']
+                    message += " " + current_coords()
                     s.send(message.encode('utf-8'))
 
                     # unlock main thread
@@ -424,7 +427,7 @@ if args.server is not None:
         else:
             current_user['player'] = list(a_p)[int(choice)]
             print("selected : %s" % (current_user['player']))
-create_message(0, "/player " + current_user['player'])
+    create_message(0, "/player " + current_user['player'] + " " + current_coords())
 
 def init_movement(movement):
     current_user['move'] = movement
@@ -479,6 +482,14 @@ def init():
     find(apple_coords, 'A')
 
 init()
+
+def current_coords():
+    if current_user['player'] == 'eve':
+        return str(woman_coords[0]) + ":" + str(woman_coords[1])
+    elif current_user['player'] == 'adam':
+        return str(man_coords[0]) + ":" + str(man_coords[1])
+    elif current_user['player'] == 'snake':
+        return str(snake_coords[0]) + ":" + str(snake_coords[1])
 
 # current_user['key'] = crypt.mksalt(crypt.METHOD_SHA256)
 logging.debug("Create user key : %s" % (current_user['key']))
