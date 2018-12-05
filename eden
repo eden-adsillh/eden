@@ -485,7 +485,7 @@ if args.server is not None:
         print("%s is already selected by another player, avaible:" % (args.player))
         for index, name in enumerate(a_p):
             print("%s : %s" % (index, name))
-        choice = input("Select a player : 0 - %s :" % (len(a_p)))
+        choice = input("Select a player : 0 - %s :" % (len(a_p) - 1))
         if int(choice) > len(a_p):
             print("Bad choice!")
         else:
