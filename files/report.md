@@ -117,6 +117,8 @@ Comme la vérification des messages nécessite l'envoi du sel aux adversaires, i
 pourraient essayer de déchiffrer les message suivants avec la clé obtenue. Il
 est donc nécessaire de changer la clé à chaque tour.
 
+Voir l'annexe 2 pour une PoC
+
 ### Signal et Thread
 
 Afin de prendre en compte le signal SIGINT avec notre thread réseau, nous avons
@@ -142,15 +144,15 @@ copiée.
 
 L'aide d'**iPython** a aussi été précieuse notamment pour les opérations sur les
 variables (comparaison de dictionnaires ou de listes, découpages de chaines avec
-des *regex* etc.). Il nous a aussi permis de tester rapidement des bout de code et de
-comprendre le foctionnement de certaines fonctions comme `crypt.mksalt()` par
-exemple.
+des *regex* etc.). Il nous a aussi permis de tester rapidement des bout de code
+et de comprendre le foctionnement de certaines fonctions comme `crypt.mksalt()`
+par exemple.
 
 ## Conclusion
 
 Avec ce projet, nous avons pu découvrir Python un plus en profondeur et
 entrevoir les possibilités de ce langage. Sa librairie standard bien fournie,
-ses type de variable très pratiques (tuples, dictionnaires, listes) et les
+ses types de variable très pratiques (tuples, dictionnaires, listes) et les
 nombreux modules disponnibles en font un langage de choix qui mérite sa solide
 réputation.
 
@@ -195,7 +197,7 @@ for i in ['LEFT', 'DOWN', 'UP', 'RIGHT']:
 ### Annexe 2
 
 Petit programme en python permettant de déchiffer les messages envoyés par un
-jouer s'il ne change pas de sel cryptographique.
+jouer s'il ne change pas de sel cryptographique entre les tours.
 
 ```python
 #!/bin/python
