@@ -68,7 +68,7 @@ d'informations entre pairs précis :
 Le joueur 1 ignorera toutes les requêtes `/peer` sauf celles venant du joueur 2
 afin d'éviter les problèmes de connexion infinie ( 1 -> 2 -> 3 -> 2 ->3 etc.).
 
-Avec ce mode de communication, chacun des joueurs possèdent une version du
+Avec ce mode de communication, chacun des joueurs possède une version du
 modèle de données en local et effectue les modifications sur celui-ci. Ce
 fonctionnement nous a inévitablement amené à rencontrer de nombreux bugs car les
 données pouvaient être différentes selon les clients. C'est pourquoi il a fallu
