@@ -31,8 +31,11 @@ import logging
 import socket
 import select
 import threading
-
-is_server = False
+import os
+import crypt
+import queue
+import time
+import signal
 
 map = [ [ ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ' ],
         [ ' ', 'X', 'X', 'X', 'X', 'X', 'X', ' ', 'X', ' ' ],
@@ -50,49 +53,76 @@ height = len(map)
 unit = 64
 grass = (0x00, 0x90, 0x00)
 
+woman_move = [ 0, 0 ]
+man_move = [ 0, 0 ]
+snake_move = [ 0, 0 ]
+round_played = False
+
+# Network message structure
+class n_message:
+    player = 0
+    msg = ""
+
+u_attr = {}
+current_user = {}
+m_queue = queue.Queue()
+
 # Parse arguments
 def parse_args():
-    parser = argparse.ArgumentParser(description="A little game about adam and Eve")
-    parser.add_argument('-s','--server',
-            help="Connect to server",
-            dest='server')
+    parser = argparse.ArgumentParser(description="A game about adam, Eve")
+    parser.add_argument('-s', '--server',
+                        help="Connect to server",
+                        dest='server')
 
     parser.add_argument('-p', '--port',
-            type=int,
-            help='Port of the server. If not specified, `7777` is used')
+                        type=int, default=7777, dest='port',
+                        help='Serveur port. default : 7777')
 
-    parser.add_argument('-d','--debug',
-            help="Priont output messages",
-            action='store_true',
-            dest='debug')
+    parser.add_argument('-l', '--listen-port',
+                        type=int, default=7777, dest='l_port',
+                        help='Listen port. default : 7777')
+
+    parser.add_argument('-d', '--debug',
+                        help="Print output messages",
+                        action='store_true',
+                        dest='debug')
+
+    parser.add_argument('--player',
+                        default='adam',
+                        choices=['adam', 'eve', 'snake'],
+                        dest='player',
+                        help='Play Adam, Eve or Snake')
 
     return parser.parse_args()
-args = parse_args()
 
-# Initialize socket
-so = socket.socket(socket.AF_INET, socket.SOCK_STREAM, 0)
-so_list = []
-port = 7777
-if args.port:
-    port = args.port
-if args.server:
-    opponent_so = socket.create_connection((args.server, port))
-else:
-    is_server = True
-    so.bind(('', port))
-    so.listen(1)
+def get_all_hmoves():
+    #if not current_user['hashed_move']:
+    #    return False
+    for _, a in u_attr.items():
+        if not a['hashed_move']:
+            return False
+    return True
 
-# Waiting for opponent to connect if this is the server. Bypass if not
-if is_server:
-    print('Waiting for opponent to connect...')
-    opponent_so, opponent_addr = so.accept()
 
-# Pygame initialization
-pygame.init()
-screen = pygame.display.set_mode( (unit * width, unit * height) )
-alpha = 128
+def get_all_moves():
+    #if not current_user['move']:
+    #    return False
+    for _, a in u_attr.items():
+        if not a['move']:
+            return False
+    return True
+
+
+def current_coords():
+    if current_user['player'] == 'eve':
+        return str(woman_coords[0]) + ":" + str(woman_coords[1])
+    elif current_user['player'] == 'adam':
+        return str(man_coords[0]) + ":" + str(man_coords[1])
+    elif current_user['player'] == 'snake':
+        return str(snake_coords[0]) + ":" + str(snake_coords[1])
 
 # Load resources
+alpha = 128
 woman = pygame.image.load("image/woman.png")
 woman_ghost = woman.copy()
 woman_ghost.fill((255, 255, 255, alpha), None, pygame.BLEND_RGBA_MULT)
@@ -113,10 +143,6 @@ stone_coords = [ 0, 0 ]
 apple = pygame.image.load("image/apple.png")
 apple_coords = [ 0, 0 ]
 
-woman_move = [ 0, 0 ]
-man_move = [ 0, 0 ]
-snake_move = [ 0, 0 ]
-
 # Initialize positions
 def init():
     def find(coords, c):
@@ -133,103 +159,430 @@ def init():
     find(snake_coords, 'S')
     find(apple_coords, 'A')
 
-# Listening thread function
-def socket_thread():
-    global woman_move
-    global man_move
-    global snake_move
-    print(so_list)
-    while True:
-        rea, wri, exc = select.select(so_list, [], [])
-        for item in rea:
-            message = item.recv(1024)
-            logging.info('opponent message recieved')
-            if message == b'':
-                so_list.remove(item)
-            elif message == b'UP':
-                if is_server:
-                    man_move =      [ 0, -1 ]
-                else:
-                    woman_move =    [ 0, -1 ]
-            elif message == b'DOWN':
-                if is_server:
-                    man_move =      [ 0, 1 ]
-                else:
-                    woman_move =    [ 0, 1 ]
-            elif message == b'LEFT':
-                if is_server:
-                    man_move =      [ -1, 0 ]
-                else:
-                    woman_move =    [ -1, 0 ]
-            elif message == b'RIGHT':
-                if is_server:
-                    man_move =      [ 1, 0 ]
-                else:
-                    woman_move =    [ 1, 0 ]
-
-# Launching the listening thread
-so_list.append(opponent_so)
-threading.Thread(None, socket_thread).start()
-
-
 init()
 
-log_f='%(levelname)s:%(message)s'
+def set_coords(player, position):
+    global woman_coords
+    global man_coords
+    global snake_coords
+    
+    if player == 'eve':
+        woman_coords = position
+    elif player == 'adam':
+        man_coords = position
+    elif player == 'snake':
+        snake_coords = position
 
+class NetEvents(threading.Thread):
+
+    def __init__(self):
+        threading.Thread.__init__(self)
+        self.so_list = []
+
+    # Process command receive
+    def process_command(self, msg, index):
+        import re
+        logging.debug("player %s sent command" % (u_attr[index]['player']))
+        command, args = re.search(r"^/([\S]*)[\s](.*)", msg).group(1, 2)
+        if command == "move":
+            logging.debug("-> move '%s'" % (args))
+            if u_attr[index]['hashed_move'] == '':
+                u_attr[index]['hashed_move'] = args
+                # When receive a message test if we have from all peers
+            else:
+                # move can't be changed
+                logging.debug("->-> move already set for this player")
+
+        elif command == "key":
+            logging.debug("->  key '%s'" % (args))
+            move, key = re.search(
+                r"(.*)[\s](.*)",
+                args).group(1, 2)
+            rhmove = crypt.crypt(move, key).split('$')[3]
+            if u_attr[index]['hashed_move'] != rhmove:
+                # Player cheat
+                print("->-> cheat detected wanted '%s' / get '%s'" % (
+                    index, u_attr[index]['hashed_move'],
+                    rhmove))
+                # TODO: what do you do in this case
+            else:
+                logging.debug("->-> move verification OK")
+                u_attr[index]['move'] = move
+
+        # someone want to annonce
+        elif command == "annonce":
+            logging.debug("-> annonce %s" % args)
+            ip, port = args.split(':')
+            found = False
+
+            # Accept peer annonce only from first opponent
+            if index != 4:
+                logging.debug("->-> ignore peer %s" % (index))
+                return
+
+            # Test if peer is already connected
+            for k, i in u_attr.items():
+                # Send peer information to third player. exclude current
+                # player and player who annonce him
+
+                if i['ip'] == ip and i['port'] == port:
+                    logging.debug("->-> already connected")
+                    found = True
+
+            if not found:
+                self.client_connect(ip, port)
+
+        # peer send which personnage he play
+        elif command == "player":
+            logging.debug("-> played character: %s" % (args))
+            player, str_position = args.split(" ")
+            u_attr[index]['player'] = player
+            position = []
+            for item in str_position.split(":"):
+                position.append(int(item))
+            set_coords(player, position)
+            c_event.set()
+
+        # Get peer listen port
+        elif command == "port":
+            logging.debug("-> peer listen port: %s" % (args))
+            u_attr[index]['port'] = args
+
+    def client_connect(self, ip, port):
+        # If we have a peer, then wee need to connect
+        o_so = socket.create_connection((ip, port))
+        self.so_list.append(o_so)
+        logging.debug("Connected to server ip :%s port:%s" % (ip, port))
+        # Create dict for current player
+        u_attr[o_so.fileno()] = {
+            'player': '',
+            'ip': ip,
+            'port': port,                        # server listening port
+            'hashed_move': '',
+            'move': '',
+            'key': ''
+        }
+        # create_message(o_so.fileno(), "/port " + str(args.l_port))
+        msg = "/port " + str(args.l_port)
+
+        o_so.send(msg.encode('utf8'))
+        # self.send_queued_messages(self.so_list)
+        # Waint until connection and player attribution done
+
+    def run(self):
+        global woman_move
+        global man_move
+        global snake_move
+        global round_played
+
+        # Initialize socket
+        so = socket.socket(socket.AF_INET, socket.SOCK_STREAM, 0)
+        so.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        so.bind(('', args.l_port))
+        # Accept only 3 peer
+        so.listen(3)
+        self.so_list.append(so)
+        logging.debug("Starting net thread")
+
+        if args.server:
+            self.client_connect(args.server, args.port)
+
+        while not stop.is_set():
+            rea, wri, exc = select.select(self.so_list, self.so_list, [], 0)
+
+            # Whe have some net message...
+            for item in rea:
+                if item is so:
+                    s, addr = item.accept()
+                    self.so_list.append(s)
+                    logging.debug("Here comes a new challenger %s" % (s.fileno()))
+
+                    # Create dict for current player
+                    u_attr[s.fileno()] = {
+                        'player': '',
+                        'ip': addr[0],
+                        'port': '',
+                        'hashed_move': '',
+                        'move': '',
+                        'key': ''
+                    }
+                    # Get peer listen port to annonce
+                    message = s.recv(1024)
+                    self.process_command(message.decode('utf-8'), s.fileno())
+
+                    # Send peers to new connected client
+                    if len(self.so_list) > 2:
+                        # annonce all peers to new connected player
+                        for an in wri:
+                            message = "/annonce "
+                            message += u_attr[an.fileno()]['ip'] + ':'
+                            message += str(u_attr[an.fileno()]['port'])
+                            s.send(message.encode('utf-8'))
+                            time.sleep(.5)
+
+                    else:
+                        logging.debug("No peer to annonce")
+
+                    # send current player
+                    message = "/player " + current_user['player']
+                    message += " " + current_coords()
+                    s.send(message.encode('utf-8'))
+
+                    # unlock main thread
+                    s_event.set()
+
+                else:
+                    message = item.recv(1024)
+                    if message == b'':
+                        # Remove user attributes before socket
+                        del u_attr[item.fileno()]
+                        logging.debug(u_attr)
+                        self.so_list.remove(item)
+                        logging.debug("User disconnected")
+                        # TODO: disconnect management
+                    else:
+                        self.process_command(message.decode('utf-8'),
+                                             item.fileno())
+            # We receive message, time to send
+            while True:
+                try:
+                    m = m_queue.get(block=False)
+                except queue.Empty:
+                    break
+                if m.player == 0:
+                    logging.debug("send %s to all" % (m.msg))
+                    for item in wri:
+                        logging.debug("Sending a command")
+                        item.send(m.msg.encode('utf-8'))
+                else:
+                    if False:
+                        logging.error("Send a message to an unknown player")
+                        sys.exit(10)
+                    else:
+                        logging.debug("send %s to %s" % (m.msg, m.player))
+                        for item in wri:
+                            # We need to find correct socket by fileno
+                            if item.fileno() is m.player:
+                                item.send(m.msg.encode('utf-8'))
+
+            if get_all_hmoves() and round_played:
+                create_message(0, "/key " + current_user['move'] + " " + current_user['key'])
+                current_user['move'] = ''
+                round_played = False
+
+            if get_all_moves():
+                for index, item in u_attr.items():
+                    if item['player'] == 'eve':
+                        if item['move'] == "UP":
+                            woman_move = [ 0, -1 ]
+                        elif item['move'] == "DOWN":
+                            woman_move = [ 0, 1 ]
+                        elif item['move'] == "LEFT":
+                            woman_move = [ -1, 0 ]
+                        elif item['move'] == "RIGHT":
+                            woman_move = [ 1, 0 ]
+                    elif item['player'] == 'adam':
+                        if item['move'] == "UP":
+                            man_move = [ 0, -1 ]
+                        elif item['move'] == "DOWN":
+                            man_move = [ 0, 1 ]
+                        elif item['move'] == "LEFT":
+                            man_move = [ -1, 0 ]
+                        elif item['move'] == "RIGHT":
+                            man_move = [ 1, 0 ]
+                    elif item['player'] == 'snake':
+                        if item['move'] == "UP":
+                            snake_move = [ 0, -1 ]
+                        elif item['move'] == "DOWN":
+                            snake_move = [ 0, 1 ]
+                        elif item['move'] == "LEFT":
+                            snake_move = [ -1, 0 ]
+                        elif item['move'] == "RIGHT":
+                            snake_move = [ 1, 0 ]
+                    clear_move_attr(item)
+
+def clear_move_attr(attr_dict):
+    attr_dict['move'] = ''
+    attr_dict['hashed_move'] = ''
+    attr_dict['key'] = ''
+
+# Signal handler for CTRL + C
+def handler_exit(signum, frame):
+    logging.debug("signal handler set...")
+    stop.set()
+    net.join()
+    sys.exit()
+
+def create_message(player, msg):
+    logging.debug("Create a message to %s - %s" % (player, msg))
+    m = n_message
+    m.player = player
+    m.msg = msg
+    m_queue.put(m)
+
+# Return true if all player charaters are set
+def get_all_players():
+    if len(u_attr) == 0:
+        return True
+    for index, item in u_attr.items():
+        if not item['player']:
+            logging.debug("player %s have not choose character" % (index))
+            return False
+    return True
+
+signal.signal(signal.SIGINT, handler_exit)
+args = parse_args()
+
+log_f = '%(levelname)s: %(message)s'
 if not args.debug:
     logging.basicConfig(format=log_f, level=logging.ERROR)
 else:
     logging.basicConfig(format=log_f, level=logging.DEBUG)
     logging.debug("Debug mode activated")
 
+logging.debug("starting game with parameters : %s" % (args))
+# Two different Event, one for server, when a client is connected
+# anoter for the client when connexion tu server is finished
+
+s_event = threading.Event()
+c_event = threading.Event()
+
+# Event for signal...
+stop = threading.Event()
+
+# current player dict
+current_user = {
+    'move': '',
+    'key': '',
+    'hashed_move': '',
+    'player': args.player
+}
+
+# Launching the listening thread
+net = NetEvents()
+net.start()
+
+if args.server is not None:
+    # Waiting for annonce
+    c_event.wait()
+    # Player must choose a character
+    while not get_all_players():
+        time.sleep(1)
+
+    players = []
+    for _, item in u_attr.items():
+        players.append(item['player'])
+
+# If there more than # player, can't play
+    if len(players) >= 3:
+        print("There's no avaible player exiting")
+        stop.set()
+        net.join()
+        sys.exit()
+
+    while current_user['player'] in players:
+        a_p = set(['adam', 'eve', 'snake']).difference(set(players))
+        print("%s is already selected by another player, avaible:" % (args.player))
+        for index, name in enumerate(a_p):
+            print("%s : %s" % (index, name))
+        choice = input("Select a player : 0 - %s :" % (len(a_p) - 1))
+        if int(choice) > len(a_p):
+            print("Bad choice!")
+        else:
+            current_user['player'] = list(a_p)[int(choice)]
+            print("selected : %s" % (current_user['player']))
+    create_message(0, "/player " + current_user['player'] + " " + current_coords())
+
+def init_movement(movement):
+    current_user['move'] = movement
+
+# Unlock thread when user is connected (server mode)
+if args.server is None:
+    s_event.wait()
+
+logging.debug("We pass the wait event")
+
+# Pygame initialization
+pygame.init()
+screen = pygame.display.set_mode( (unit * width, unit * height) )
+pygame.display.set_caption("eden - " + current_user['player'])
+
+# current_user['key'] = crypt.mksalt(crypt.METHOD_SHA256)
+logging.debug("Create user key : %s" % (current_user['key']))
+
 while True:
     e = pygame.event.wait()
 
     # Check for exit
     if e.type == pygame.QUIT:
+        os.kill(os.getpid(), signal.SIGINT)
         sys.exit()
 
     elif e.type == pygame.KEYDOWN:
-        if is_server:
-            # Check for woman movements
-            if woman_move == [ 0, 0 ]:
+        if e.key == pygame.K_RETURN:
+            if current_user['move'] and not round_played:
+                current_user['key'] = crypt.mksalt(crypt.METHOD_SHA256)
+                current_user['hashed_move'] = crypt.crypt(
+                    current_user['move'],
+                    current_user['key']).split('$')[3]
+                create_message(0,"/move " + str(current_user['hashed_move']))
+                current_user['hashed_move'] == ''
+                round_played = True
 
+        elif not round_played:
+
+            if current_user['player'] == 'eve':
                 if e.key == pygame.K_UP:
                     woman_move = [ 0, -1 ]
-                    opponent_so.send(b'UP')
+                    init_movement("UP")
                     pass
                 elif e.key == pygame.K_DOWN:
                     woman_move = [ 0, 1 ]
-                    opponent_so.send(b'DOWN')
+                    init_movement("DOWN")
                     pass
                 elif e.key == pygame.K_LEFT:
                     woman_move = [ -1, 0 ]
-                    opponent_so.send(b'LEFT')
+                    init_movement("LEFT")
                     pass
                 elif e.key == pygame.K_RIGHT:
                     woman_move = [ 1, 0 ]
-                    opponent_so.send(b'RIGHT')
+                    init_movement("RIGHT")
                     pass
 
-        else:
-            # Check for man movements
-            if man_move == [ 0, 0 ]:
+            elif current_user['player'] == 'snake':
+                if e.key == pygame.K_UP:
+                    snake_move = [ 0, -1 ]
+                    init_movement("UP")
+                    pass
+                elif e.key == pygame.K_DOWN:
+                    snake_move = [ 0, 1 ]
+                    init_movement("DOWN")
+                    pass
+                elif e.key == pygame.K_LEFT:
+                    snake_move = [ -1, 0 ]
+                    init_movement("LEFT")
+                    pass
+                elif e.key == pygame.K_RIGHT:
+                    snake_move = [ 1, 0 ]
+                    init_movement("RIGHT")
+                    pass
 
+            elif current_user['player'] == 'adam':
                 if e.key == pygame.K_UP:
                     man_move = [ 0, -1 ]
-                    opponent_so.send(b'UP')
+                    init_movement("UP")
                     pass
                 elif e.key == pygame.K_DOWN:
                     man_move = [ 0, 1 ]
-                    opponent_so.send(b'DOWN')
+                    init_movement("DOWN")
                     pass
                 elif e.key == pygame.K_LEFT:
                     man_move = [ -1, 0 ]
-                    opponent_so.send(b'LEFT')
+                    init_movement("LEFT")
                     pass
                 elif e.key == pygame.K_RIGHT:
                     man_move = [ 1, 0 ]
-                    opponent_so.send(b'RIGHT')
+                    init_movement("RIGHT")
                     pass
 
     #else:
@@ -274,14 +627,17 @@ while True:
         woman_move = [ 0, 0 ]
         man_newcoords = man_coords
         man_move = [ 0, 0 ]
+        snake_newcoords = snake_coords
+        snake_move = [ 0, 0 ]
 
     # Make everybody move when everybody chose her/his direction
-    if woman_move != [ 0, 0 ] and man_move != [ 0, 0 ]:
+    if woman_move != [ 0, 0 ] and man_move != [ 0, 0 ]  and (len(u_attr.items()) < 2 or snake_move != [ 0, 0 ]):
         woman_coords = woman_newcoords
         man_coords = man_newcoords
         snake_coords = snake_newcoords
         woman_move = [ 0, 0 ]
         man_move = [ 0, 0 ]
+        snake_move = [ 0, 0 ]
 
     #logging.debug("woman at %u,%u to %u,%u" % (woman_coords[0], woman_coords[1], woman_newcoords[0], woman_newcoords[1]))
     #logging.debug("man at %u,%u to %u,%u" % (man_coords[0], man_coords[1], man_newcoords[0], man_newcoords[1]))
