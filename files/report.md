@@ -123,7 +123,7 @@ Voir l'annexe 2 pour une PoC
 
 Afin de prendre en compte le signal SIGINT avec notre thread réseau, nous avons
 du chercher du côté de la gestion de signal en Python. Plusieurs facteurs
-faisait que ça ne se passait pas comme prévu : 
+faisait que ça ne se passait pas comme prévu :
 
  - Le signal `SIGINT` était reçu par le thread principal qui ne le répercuttait
      pas sur le thread réseau.
@@ -171,6 +171,9 @@ Nous pourrions cependant améliorer certains points :
      le premier uniquement)
  - Travailler sur l'optimisation générale afin de réduire son empreinte sur le
      temps CPU.
+ - Avoir une approche plus "orienté objet" afin de rendre le code plus lisible,
+     plus évolutif et limiter les redondances (pour changer les valeurs de
+     déplacement des joueurs par exemple).
 
 ## Annexes
 
